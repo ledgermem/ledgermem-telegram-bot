@@ -2,7 +2,7 @@ import "dotenv/config";
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
 import { LedgerMem } from "@ledgermem/memory";
-import { loadConfig } from "./config.js";
+import { loadConfig, isChatAllowed } from "./config.js";
 import {
   handleRemember,
   handleRecall,
@@ -24,34 +24,81 @@ async function main(): Promise<void> {
 
   const bot = new Telegraf(cfg.telegramBotToken);
 
+  // Dedup updates so Telegram retries (HTTP errors / restarts) can't double
+  // ingest the same message.
+  const seenUpdates = new Set<number>();
+  const SEEN_MAX = 5000;
+  const isDuplicate = (updateId: number): boolean => {
+    if (seenUpdates.has(updateId)) return true;
+    seenUpdates.add(updateId);
+    if (seenUpdates.size > SEEN_MAX) {
+      const oldest = seenUpdates.values().next().value;
+      if (oldest !== undefined) seenUpdates.delete(oldest);
+    }
+    return false;
+  };
+
   bot.command("remember", async (ctx) => {
-    const reply = await handleRemember({
-      text: argText(ctx.message.text, "remember"),
-      chatId: String(ctx.chat.id),
-      userId: String(ctx.from.id),
-      memory,
-    });
-    await ctx.reply(reply);
+    const chatId = String(ctx.chat.id);
+    if (!isChatAllowed(chatId, cfg.allowedChatIds)) {
+      await ctx.reply("This chat is not authorized to write to memory.");
+      return;
+    }
+    if (isDuplicate(ctx.update.update_id)) return;
+    try {
+      const reply = await handleRemember({
+        text: argText(ctx.message.text, "remember"),
+        chatId,
+        userId: String(ctx.from.id),
+        memory,
+      });
+      await ctx.reply(reply);
+    } catch (err) {
+      console.error("/remember failed:", err);
+      await ctx.reply("Sorry, something went wrong.");
+    }
   });
 
   bot.command("recall", async (ctx) => {
-    const reply = await handleRecall({
-      text: argText(ctx.message.text, "recall"),
-      chatId: String(ctx.chat.id),
-      userId: String(ctx.from.id),
-      memory,
-    });
-    await ctx.reply(reply);
+    const chatId = String(ctx.chat.id);
+    if (!isChatAllowed(chatId, cfg.allowedChatIds)) {
+      await ctx.reply("This chat is not authorized to read memory.");
+      return;
+    }
+    if (isDuplicate(ctx.update.update_id)) return;
+    try {
+      const reply = await handleRecall({
+        text: argText(ctx.message.text, "recall"),
+        chatId,
+        userId: String(ctx.from.id),
+        memory,
+      });
+      await ctx.reply(reply);
+    } catch (err) {
+      console.error("/recall failed:", err);
+      await ctx.reply("Sorry, something went wrong.");
+    }
   });
 
   bot.command("forget", async (ctx) => {
-    const reply = await handleForget({
-      text: argText(ctx.message.text, "forget"),
-      chatId: String(ctx.chat.id),
-      userId: String(ctx.from.id),
-      memory,
-    });
-    await ctx.reply(reply);
+    const chatId = String(ctx.chat.id);
+    if (!isChatAllowed(chatId, cfg.allowedChatIds)) {
+      await ctx.reply("This chat is not authorized to delete memory.");
+      return;
+    }
+    if (isDuplicate(ctx.update.update_id)) return;
+    try {
+      const reply = await handleForget({
+        text: argText(ctx.message.text, "forget"),
+        chatId,
+        userId: String(ctx.from.id),
+        memory,
+      });
+      await ctx.reply(reply);
+    } catch (err) {
+      console.error("/forget failed:", err);
+      await ctx.reply("Sorry, something went wrong.");
+    }
   });
 
   bot.on(message("text"), async (ctx) => {
@@ -59,6 +106,9 @@ async function main(): Promise<void> {
     if (msg.text.startsWith("/")) return;
     const fwd = msg.forward_origin;
     if (!fwd) return;
+    const chatId = String(ctx.chat.id);
+    if (!isChatAllowed(chatId, cfg.allowedChatIds)) return;
+    if (isDuplicate(ctx.update.update_id)) return;
     let forwardedFrom = "unknown";
     if (fwd.type === "user") forwardedFrom = `user:${fwd.sender_user.id}`;
     else if (fwd.type === "channel")
@@ -67,14 +117,18 @@ async function main(): Promise<void> {
     else if (fwd.type === "hidden_user")
       forwardedFrom = `hidden:${fwd.sender_user_name}`;
 
-    const reply = await handleForwardCapture({
-      text: msg.text,
-      chatId: String(ctx.chat.id),
-      userId: String(ctx.from.id),
-      forwardedFrom,
-      memory,
-    });
-    if (reply) await ctx.reply(reply);
+    try {
+      const reply = await handleForwardCapture({
+        text: msg.text,
+        chatId,
+        userId: String(ctx.from.id),
+        forwardedFrom,
+        memory,
+      });
+      if (reply) await ctx.reply(reply);
+    } catch (err) {
+      console.error("forward capture failed:", err);
+    }
   });
 
   await bot.launch();
