@@ -15,6 +15,18 @@ function argText(text: string, command: string): string {
   return stripped;
 }
 
+// Telegram's sendMessage caps `text` at 4096 UTF-16 code units. Recall replies
+// with a few large memories trip this and the whole reply gets dropped with a
+// 400 "message is too long" error, leaving the user staring at silence.
+const TELEGRAM_TEXT_LIMIT = 4096;
+const TRUNCATION_SUFFIX = "\n…(truncated)";
+
+function clampForTelegram(text: string): string {
+  if (text.length <= TELEGRAM_TEXT_LIMIT) return text;
+  const room = TELEGRAM_TEXT_LIMIT - TRUNCATION_SUFFIX.length;
+  return `${text.slice(0, room)}${TRUNCATION_SUFFIX}`;
+}
+
 async function main(): Promise<void> {
   const cfg = loadConfig();
   const memory = new LedgerMem({
@@ -52,7 +64,7 @@ async function main(): Promise<void> {
         userId: String(ctx.from.id),
         memory,
       });
-      await ctx.reply(reply);
+      await ctx.reply(clampForTelegram(reply));
     } catch (err) {
       console.error("/remember failed:", err);
       await ctx.reply("Sorry, something went wrong.");
@@ -73,7 +85,7 @@ async function main(): Promise<void> {
         userId: String(ctx.from.id),
         memory,
       });
-      await ctx.reply(reply);
+      await ctx.reply(clampForTelegram(reply));
     } catch (err) {
       console.error("/recall failed:", err);
       await ctx.reply("Sorry, something went wrong.");
@@ -94,7 +106,7 @@ async function main(): Promise<void> {
         userId: String(ctx.from.id),
         memory,
       });
-      await ctx.reply(reply);
+      await ctx.reply(clampForTelegram(reply));
     } catch (err) {
       console.error("/forget failed:", err);
       await ctx.reply("Sorry, something went wrong.");
@@ -125,7 +137,7 @@ async function main(): Promise<void> {
         forwardedFrom,
         memory,
       });
-      if (reply) await ctx.reply(reply);
+      if (reply) await ctx.reply(clampForTelegram(reply));
     } catch (err) {
       console.error("forward capture failed:", err);
     }
