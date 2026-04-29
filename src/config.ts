@@ -1,7 +1,7 @@
 export interface BotConfig {
   telegramBotToken: string;
-  ledgermemApiKey: string;
-  ledgermemWorkspaceId: string;
+  getmnemoApiKey: string;
+  getmnemoWorkspaceId: string;
   // Allowlist of Telegram chat ids permitted to write to memory. Empty set
   // = unrestricted (back-compat for single-user self-hosted setups). Set
   // ALLOWED_CHAT_IDS in any shared deployment.
@@ -10,8 +10,8 @@ export interface BotConfig {
 
 const REQUIRED = [
   "TELEGRAM_BOT_TOKEN",
-  "LEDGERMEM_API_KEY",
-  "LEDGERMEM_WORKSPACE_ID",
+  "GETMNEMO_API_KEY",
+  "GETMNEMO_WORKSPACE_ID",
 ] as const;
 
 function loadAllowedChatIds(): Set<string> {
@@ -31,8 +31,8 @@ export function loadConfig(): BotConfig {
   }
   return {
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN as string,
-    ledgermemApiKey: process.env.LEDGERMEM_API_KEY as string,
-    ledgermemWorkspaceId: process.env.LEDGERMEM_WORKSPACE_ID as string,
+    getmnemoApiKey: process.env.GETMNEMO_API_KEY as string,
+    getmnemoWorkspaceId: process.env.GETMNEMO_WORKSPACE_ID as string,
     allowedChatIds: loadAllowedChatIds(),
   };
 }

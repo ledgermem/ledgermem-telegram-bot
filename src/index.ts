@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
-import { LedgerMem } from "@ledgermem/memory";
+import { Mnemo } from "@getmnemo/memory";
 import { loadConfig, isChatAllowed } from "./config.js";
 import {
   handleRemember,
@@ -29,9 +29,9 @@ function clampForTelegram(text: string): string {
 
 async function main(): Promise<void> {
   const cfg = loadConfig();
-  const memory = new LedgerMem({
-    apiKey: cfg.ledgermemApiKey,
-    workspaceId: cfg.ledgermemWorkspaceId,
+  const memory = new Mnemo({
+    apiKey: cfg.getmnemoApiKey,
+    workspaceId: cfg.getmnemoWorkspaceId,
   });
 
   const bot = new Telegraf(cfg.telegramBotToken);
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
 
   await bot.launch();
   // eslint-disable-next-line no-console
-  console.log("LedgerMem Telegram bot running.");
+  console.log("Mnemo Telegram bot running.");
   process.once("SIGINT", () => bot.stop("SIGINT"));
   process.once("SIGTERM", () => bot.stop("SIGTERM"));
 }
